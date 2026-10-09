@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Hangman</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+  --bg:#f3f5f8;--panel:#ffffff;--ink:#12233f;--muted:#5b6b86;--line:#12233f;
+  --key:#e3e9f2;--key-ink:#12233f;--good:#1f8a5b;--bad:#c23b3b;--accent:#d98a00;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0d1b33;--panel:#142645;--ink:#eaf0fb;--muted:#9db0cf;--line:#eaf0fb;
+  --key:#1f3560;--key-ink:#eaf0fb;--good:#4fd69b;--bad:#ff7a7a;--accent:#f2b84b;}}
+:root[data-theme="dark"]{
+  --bg:#0d1b33;--panel:#142645;--ink:#eaf0fb;--muted:#9db0cf;--line:#eaf0fb;
+  --key:#1f3560;--key-ink:#eaf0fb;--good:#4fd69b;--bad:#ff7a7a;--accent:#f2b84b;}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Bricolage Grotesque",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;min-height:100%}
+main{max-width:520px;margin:0 auto;padding:16px}
+h1{font-size:1.6rem;font-weight:800;margin:4px 0 12px;letter-spacing:-.02em}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+.stat{background:var(--panel);border:1.5px solid var(--line);border-radius:10px;padding:8px 10px}
+.stat b{display:block;font-size:1.35rem;line-height:1.1}
+.stat span{font-size:.78rem;color:var(--muted)}
+.board{background:var(--panel);border:1.5px solid var(--line);border-radius:14px;padding:12px}
+svg{display:block;width:100%;max-width:230px;height:auto;margin:0 auto}
+svg *{stroke:var(--line);stroke-width:4;fill:none;stroke-linecap:round}
+svg .part{opacity:0;transition:opacity .25s}
+svg .part.on{opacity:1}
+svg .lose{stroke:var(--bad)}
+.dots{display:flex;justify-content:center;gap:6px;margin:6px 0}
+.dots i{width:12px;height:12px;border-radius:50%;background:var(--accent)}
+.dots i.off{background:transparent;border:2px solid var(--muted)}
+.word{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin:12px 0 6px}
+.word span{width:30px;height:42px;border-bottom:3px solid var(--line);text-align:center;font-size:1.9rem;font-weight:800;line-height:42px;text-transform:uppercase}
+.word span.miss{color:var(--bad)}
+.msg{min-height:2.6em;text-align:center;margin:6px 0;font-size:.98rem}
+.msg.win{color:var(--good);font-weight:700}.msg.lose{color:var(--bad);font-weight:700}
+.keys{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin-top:10px}
+.keys button{width:calc((100% - 6*6px)/7);min-width:38px;height:44px;border:0;border-radius:8px;background:var(--key);color:var(--key-ink);font:700 1rem inherit;font-family:inherit;text-transform:uppercase;cursor:pointer}
+.keys button.hit{background:var(--good);color:#fff}
+.keys button.miss{background:var(--bad);color:#fff;opacity:.55}
+.keys button:disabled{cursor:default}
+.actions{display:flex;gap:8px;margin-top:12px}
+.actions button{flex:1;height:46px;border-radius:10px;font:700 .95rem inherit;font-family:inherit;cursor:pointer;border:1.5px solid var(--line);background:var(--panel);color:var(--ink)}
+.actions button.primary{background:var(--accent);border-color:var(--accent);color:#1a1200}
+.actions button:disabled{opacity:.45;cursor:default}
+button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){svg .part{transition:none}}
+</style>
+</head>
+<body>
+<main>
+  <h1>Hangman</h1>
+  <div class="stats">
+    <div class="stat"><b id="score">0</b><span>Score</span></div>
+    <div class="stat"><b id="best">0</b><span>Best</span></div>
+    <div class="stat"><b id="wins">0</b><span>Words won</span></div>
+  </div>
+  <div class="board">
+    <svg viewBox="0 0 200 220" role="img" aria-label="Hangman drawing">
+      <path d="M20 205H110M50 205V15H140V40"/>
+      <circle class="part" cx="140" cy="58" r="18"/>
+      <path class="part" d="M140 76V135"/>
+      <path class="part" d="M140 90L116 118"/>
+      <path class="part" d="M140 90L164 118"/>
+      <path class="part" d="M140 135L119 175"/>
+      <path class="part" d="M140 135L161 175"/>
+    </svg>
+    <div class="dots" id="dots" aria-label="Attempts left"></div>
+    <div class="word" id="word" aria-live="polite"></div>
+    <div class="msg" id="msg"></div>
+    <div class="keys" id="keys"></div>
+    <div class="actions">
+      <button id="hintBtn">Hint (costs 1 attempt)</button>
+      <button id="nextBtn" class="primary" hidden>Play again</button>
+    </div>
+  </div>
+</main>
+<script>
+const WORDS=[
+["python","A programming language named after a comedy group"],
+["elephant","The largest land animal"],
+["guitar","A string instrument, often with six strings"],
+["volcano","A mountain that can erupt with lava"],
+["pyramid","Ancient Egyptian tomb"],
+["rainbow","Appears when sun meets rain"],
+["keyboard","You type on it"],
+["planet","Earth is one"],
+["library","A place full of books you can borrow"],
+["umbrella","Keeps you dry in the rain"],
+["compass","Always points north"],
+["bicycle","Two wheels, pedal powered"],
+["lantern","A portable light you can carry"],
+["glacier","A slow river of ice"],
+["magnet","Attracts iron"],
+["penguin","A bird that swims but cannot fly"],
+["castle","A fortress where a king might live"],
+["telescope","Used to look at distant stars"]
+];
+const MAX=6, PTS=10, WIN=20;
+const $=id=>document.getElementById(id);
+let total=0,wins=0,best=0,bag=[],word,hint,guessed,left,hintUsed,over;
+try{best=+localStorage.getItem("hangman-best")||0}catch(e){}
+
+function pick(){
+  if(!bag.length) bag=WORDS.map((_,i)=>i).sort(()=>Math.random()-.5);
+  [word,hint]=WORDS[bag.pop()];
+}
+function start(){
+  pick();guessed=new Set();left=MAX;hintUsed=false;over=false;
+  $("msg").className="msg";$("msg").textContent="Pick a letter, or press a key.";
+  $("nextBtn").hidden=true;$("hintBtn").hidden=false;$("hintBtn").disabled=false;
+  const k=$("keys");k.innerHTML="";
+  for(const c of "abcdefghijklmnopqrstuvwxyz"){
+    const b=document.createElement("button");b.textContent=c;b.dataset.k=c;
+    b.onclick=()=>guess(c);k.appendChild(b);
+  }
+  draw();
+}
+function draw(reveal){
+  $("word").innerHTML=[...word].map(c=>{
+    const show=guessed.has(c)||reveal;
+    return `<span class="${reveal&&!guessed.has(c)?"miss":""}">${show?c:""}</span>`;
+  }).join("");
+  $("dots").innerHTML=Array.from({length:MAX},(_,i)=>`<i class="${i<left?"":"off"}"></i>`).join("");
+  document.querySelectorAll("svg .part").forEach((p,i)=>{
+    p.classList.toggle("on",i<MAX-left);
+    p.classList.toggle("lose",over&&left===0);
+  });
+  $("score").textContent=total;$("best").textContent=best;$("wins").textContent=wins;
+}
+function finish(won){
+  over=true;
+  document.querySelectorAll("#keys button").forEach(b=>b.disabled=true);
+  $("hintBtn").hidden=true;$("nextBtn").hidden=false;$("nextBtn").focus();
+  if(won){
+    const bonus=WIN+left*5;total+=bonus;wins++;
+    $("msg").className="msg win";
+    $("msg").textContent=`You got it! Bonus +${bonus}.`;
+  }else{
+    total=Math.max(0,total);
+    $("msg").className="msg lose";
+    $("msg").textContent=`Out of attempts. The word was "${word}".`;
+  }
+  if(total>best){best=total;try{localStorage.setItem("hangman-best",best)}catch(e){}}
+  draw(!won);
+}
+function guess(c){
+  if(over||guessed.has(c))return;
+  guessed.add(c);
+  const btn=document.querySelector(`#keys button[data-k="${c}"]`);btn.disabled=true;
+  if(word.includes(c)){
+    const n=[...word].filter(x=>x===c).length;total+=PTS*n;
+    btn.classList.add("hit");
+    $("msg").textContent=`Yes! ${n} × "${c}" (+${PTS*n})`;
+    if([...word].every(x=>guessed.has(x))){draw();return finish(true)}
+  }else{
+    left--;btn.classList.add("miss");
+    $("msg").textContent=`No "${c}" in this word.`;
+    if(left===0){draw();return finish(false)}
+  }
+  draw();
+}
+$("hintBtn").onclick=()=>{
+  if(over)return;
+  if(hintUsed){$("msg").textContent="Hint: "+hint;return}
+  if(left<=1){$("msg").textContent="Not enough attempts left for a hint.";return}
+  hintUsed=true;left--;$("msg").textContent="Hint: "+hint;
+  $("hintBtn").textContent="Show hint again (free)";draw();
+};
+$("nextBtn").onclick=()=>{
+  if(left===0)total=0; // a lost round starts a new run
+  $("hintBtn").textContent="Hint (costs 1 attempt)";start();
+};
+document.addEventListener("keydown",e=>{
+  if(e.ctrlKey||e.metaKey||e.altKey)return;
+  if(/^[a-z]$/i.test(e.key))guess(e.key.toLowerCase());
+  else if(e.key==="Enter"&&over)$("nextBtn").click();
+});
+start();
+</script>
+</body>
+</html>
